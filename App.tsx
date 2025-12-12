@@ -35,6 +35,22 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [appState, showSubmitConfirm]);
 
+  // Keyboard Navigation Effect
+  useEffect(() => {
+    if (appState !== AppState.QUIZ || showSubmitConfirm) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') {
+        setCurrentQuestionIndex(curr => Math.min(questions.length - 1, curr + 1));
+      } else if (e.key === 'ArrowLeft') {
+        setCurrentQuestionIndex(curr => Math.max(0, curr - 1));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [appState, showSubmitConfirm, questions.length]);
+
   const startQuiz = async () => {
     setAppState(AppState.LOADING);
     setError(null);
@@ -135,6 +151,15 @@ const App: React.FC = () => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Helper to check question status for palette
+  const getQuestionStatus = (idx: number) => {
+      const q = questions[idx];
+      const ans = userAnswers.find(a => a.questionId === q.id);
+      if (idx === currentQuestionIndex) return 'current';
+      if (ans) return 'answered';
+      return 'unvisited';
   };
 
   const renderIdle = () => (
@@ -259,12 +284,12 @@ const App: React.FC = () => {
           
           {appState === AppState.QUIZ && (
             <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600">
+              <div className="hidden lg:flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600">
                  <Icon name="Clock" size={16} />
                  <span className="tabular-nums">{formatTime(timer)}</span>
               </div>
-              <div className="hidden md:block text-sm font-medium text-slate-500">
-                 {config.difficulty} • {config.topic.substring(0, 15)}...
+              <div className="text-sm font-medium text-slate-500 hidden md:block">
+                 {config.difficulty}
               </div>
             </div>
           )}
@@ -279,40 +304,120 @@ const App: React.FC = () => {
         {appState === AppState.LOADING && <LoadingScreen topic={config.topic} />}
         
         {appState === AppState.QUIZ && questions.length > 0 && (
-          <div className="max-w-4xl mx-auto animate-fade-in-up pb-24 md:pb-8">
-            <QuizCard 
-              question={questions[currentQuestionIndex]}
-              questionNumber={currentQuestionIndex + 1}
-              totalQuestions={questions.length}
-              selectedOptionIndex={userAnswers.find(a => a.questionId === questions[currentQuestionIndex].id)?.selectedOptionIndex ?? null}
-              onSelectOption={handleOptionSelect}
-              onSubmitQuiz={requestSubmit} 
-            />
+          <div className="flex flex-col lg:flex-row gap-6 max-w-7xl mx-auto pb-24 lg:pb-8">
             
-            {/* Footer Controls */}
-            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 z-[60] md:static md:bg-transparent md:border-0 md:mt-6">
+            {/* Left Column: Quiz Card */}
+            <div className="flex-1 animate-fade-in-up">
+              <QuizCard 
+                question={questions[currentQuestionIndex]}
+                questionNumber={currentQuestionIndex + 1}
+                totalQuestions={questions.length}
+                selectedOptionIndex={userAnswers.find(a => a.questionId === questions[currentQuestionIndex].id)?.selectedOptionIndex ?? null}
+                onSelectOption={handleOptionSelect}
+                onSubmitQuiz={requestSubmit} 
+              />
+              
+              {/* Desktop Controls (Inline) */}
+              <div className="hidden lg:flex justify-between items-center mt-6">
+                  <button 
+                    onClick={() => setCurrentQuestionIndex(Math.max(0, currentQuestionIndex - 1))}
+                    disabled={currentQuestionIndex === 0}
+                    className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed py-2.5 px-6 rounded-xl flex items-center gap-2 font-medium shadow-sm transition-all"
+                  >
+                    <Icon name="ChevronLeft" size={20} /> Previous Question
+                  </button>
+
+                  <div className="text-xs text-slate-400 font-medium">Use Left/Right Arrows</div>
+
+                  <button 
+                    onClick={() => setCurrentQuestionIndex(Math.min(questions.length - 1, currentQuestionIndex + 1))}
+                    disabled={currentQuestionIndex === questions.length - 1}
+                    className="bg-primary-600 hover:bg-primary-700 text-white disabled:bg-slate-300 disabled:cursor-not-allowed py-2.5 px-6 rounded-xl flex items-center gap-2 font-medium shadow-md shadow-primary-200 transition-all"
+                  >
+                    Next Question <Icon name="ChevronRight" size={20} />
+                  </button>
+              </div>
+            </div>
+
+            {/* Right Column: Question Palette (Desktop Only) */}
+            <div className="hidden lg:block w-80 shrink-0 animate-fade-in">
+                <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-6 sticky top-24">
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="font-bold text-slate-800">Question Palette</h3>
+                        <div className="flex items-center gap-1.5 bg-primary-50 text-primary-700 px-3 py-1 rounded-lg text-sm font-bold">
+                             <Icon name="Clock" size={14} />
+                             <span className="tabular-nums">{formatTime(timer)}</span>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-5 gap-2 mb-6">
+                        {questions.map((_, idx) => {
+                            const status = getQuestionStatus(idx);
+                            let bgClass = "bg-slate-100 text-slate-500 border-transparent hover:bg-slate-200";
+                            
+                            if (status === 'current') {
+                                bgClass = "bg-white text-primary-600 border-primary-500 ring-2 ring-primary-100";
+                            } else if (status === 'answered') {
+                                bgClass = "bg-green-500 text-white border-green-500 hover:bg-green-600";
+                            }
+
+                            return (
+                                <button
+                                    key={idx}
+                                    onClick={() => setCurrentQuestionIndex(idx)}
+                                    className={`w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold border transition-all ${bgClass}`}
+                                >
+                                    {idx + 1}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-y-2 text-xs text-slate-500 mb-6 px-1">
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded bg-green-500"></div> Answered
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded bg-white border border-primary-500"></div> Current
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded bg-slate-100"></div> Not Visited
+                        </div>
+                    </div>
+
+                    <button 
+                        onClick={requestSubmit}
+                        className="w-full bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all"
+                    >
+                         <Icon name="CheckCircle2" size={18} /> Submit Test
+                    </button>
+                </div>
+            </div>
+            
+            {/* Mobile Footer Controls (Fixed Bottom) */}
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 z-[60]">
                 <div className="max-w-4xl mx-auto flex justify-between items-center gap-2">
                     <button 
                     onClick={() => setCurrentQuestionIndex(Math.max(0, currentQuestionIndex - 1))}
                     disabled={currentQuestionIndex === 0}
-                    className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed py-2 px-4 rounded-lg flex items-center gap-2 font-medium shadow-sm flex-1 md:flex-none justify-center"
+                    className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed py-2 px-4 rounded-lg flex items-center gap-2 font-medium shadow-sm flex-1 justify-center"
                     >
-                    <Icon name="ChevronLeft" size={20} /> पिछला
+                    <Icon name="ChevronLeft" size={20} />
                     </button>
 
                     <button 
                         onClick={requestSubmit}
-                        className="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 font-medium py-2 px-4 rounded-lg flex items-center gap-2 shadow-sm flex-1 md:flex-none justify-center"
+                        className="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 font-medium py-2 px-4 rounded-lg flex items-center gap-2 shadow-sm flex-1 justify-center whitespace-nowrap"
                     >
-                         <Icon name="CheckCircle2" size={20} /> समाप्त (Submit)
+                         Submit
                     </button>
 
                     <button 
                     onClick={() => setCurrentQuestionIndex(Math.min(questions.length - 1, currentQuestionIndex + 1))}
                     disabled={currentQuestionIndex === questions.length - 1}
-                    className="bg-primary-600 hover:bg-primary-700 text-white disabled:bg-slate-300 disabled:cursor-not-allowed py-2 px-6 rounded-lg flex items-center gap-2 font-medium shadow-md shadow-primary-200 flex-1 md:flex-none justify-center"
+                    className="bg-primary-600 hover:bg-primary-700 text-white disabled:bg-slate-300 disabled:cursor-not-allowed py-2 px-6 rounded-lg flex items-center gap-2 font-medium shadow-md shadow-primary-200 flex-1 justify-center"
                     >
-                    अगला <Icon name="ChevronRight" size={20} />
+                    <Icon name="ChevronRight" size={20} />
                     </button>
                 </div>
             </div>
