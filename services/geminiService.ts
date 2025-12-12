@@ -1,11 +1,16 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Question, QuizConfig } from "../types";
 
-// Initialize the client. API key is injected from the environment.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 export const generateQuizQuestions = async (config: QuizConfig): Promise<Question[]> => {
   try {
+    // Initialize inside the function to ensure environment variables are loaded
+    // and to handle missing keys gracefully with a try/catch block if needed.
+    if (!process.env.API_KEY) {
+      throw new Error("API Key is missing. Please set the API_KEY environment variable in your Vercel project settings.");
+    }
+    
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
     const prompt = `
       You are a senior exam setter for the Rajasthan REET Mains (Grade 3 Teacher Recruitment) Exam.
       Create a multiple-choice quiz in HINDI (Devanagari script) with the following specifications:
@@ -64,7 +69,11 @@ export const generateQuizQuestions = async (config: QuizConfig): Promise<Questio
       throw new Error("No response from Gemini");
     }
 
-    const data = JSON.parse(response.text);
+    // Clean the response text. Gemini sometimes wraps JSON in markdown code blocks.
+    let cleanText = response.text.trim();
+    cleanText = cleanText.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
+
+    const data = JSON.parse(cleanText);
     
     // Add IDs to questions for React keys
     const questionsWithIds = data.questions.map((q: any, index: number) => ({
@@ -74,8 +83,12 @@ export const generateQuizQuestions = async (config: QuizConfig): Promise<Questio
 
     return questionsWithIds;
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error generating quiz:", error);
-    throw error;
+    // Re-throw with a user-friendly message if it's the API key issue
+    if (error.message && error.message.includes("API Key")) {
+        throw error;
+    }
+    throw new Error("Failed to generate questions. Please try again.");
   }
 };

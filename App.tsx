@@ -62,9 +62,14 @@ const App: React.FC = () => {
       setTimer(0);
       setShowSubmitConfirm(false);
       setAppState(AppState.QUIZ);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("क्विज बनाने में विफल। कृपया अपना कनेक्शन जांचें या कोई अन्य विषय आज़माएं।");
+      // Show the specific error message if it's about the API key, otherwise generic
+      const errorMessage = err.message?.includes("API Key") 
+        ? err.message 
+        : "क्विज बनाने में विफल। कृपया अपना कनेक्शन जांचें या कोई अन्य विषय आज़माएं।";
+      
+      setError(errorMessage);
       setAppState(AppState.ERROR);
     }
   };
